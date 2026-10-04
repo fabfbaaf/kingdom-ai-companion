@@ -5,6 +5,7 @@ var fixtureRoot = Path.Combine(Path.GetTempPath(), "kingdom-ai-domain-tests-" + 
 Directory.CreateDirectory(fixtureRoot);
 File.WriteAllText(Path.Combine(fixtureRoot, "BuildInfo.txt"), "Version: 2.4.2\nHash: 116fe7e048\n");
 var assertions = 0;
+long observationTime = 0;
 void Check(bool result, string name)
 {
     if (!result) throw new Exception("FAIL: " + name);
@@ -13,6 +14,7 @@ void Check(bool result, string name)
 (GameAccess Access, Player P2, Il2CppRewired.Player Rewired, Observation State) Fresh(int price = 1)
 {
     Managers.Inst = new();
+    observationTime = 0;
     UnityEngine.Resources.All.Clear();
     Menu.Inst = new();
     Managers.COOP_ENABLED = Managers.IsP2Playing = true;
@@ -20,7 +22,7 @@ void Check(bool result, string name)
     UnityEngine.Time.timeScale = 1;
     var p2 = Managers.Inst.kingdom.playerTwo;
     p2.selectedPayable = new() { Price = price };
-    var access = new GameAccess(fixtureRoot, new HarmonyLib.Harmony());
+    var access = new GameAccess(fixtureRoot, new HarmonyLib.Harmony(), () => observationTime);
     access.Capture(true);
     var rewired = new Il2CppRewired.Player(1);
     access.NoteInput(p2, rewired);
@@ -40,12 +42,12 @@ try
     UnityEngine.Input.F8Pressed = false;
     Check(!f.Access.F8(), "F8 does not report a key that is not pressed");
     Managers.Inst.enemies.AllEnemies.Add(new Enemy());
-    Thread.Sleep(260);
+    observationTime += 260;
     Check(f.Access.Capture(true).World!.NearbyEnemies.Length == 1,
         "native ICollection without indexer is cast to typed IEnumerable before enumeration");
     Check(Il2CppSystem.NativeObject.Disposals > 0, "native enumerators are disposed after reads");
     Managers.Inst.payables.AllPayables = new[] { f.P2.selectedPayable! };
-    Thread.Sleep(260);
+    observationTime += 1000;
     Check(f.Access.Capture(true).World!.NearbyPayables.Length == 1, "CLR array payable enumeration still works");
     f.P2._payState = PayState.Holding;
     Check(!f.Access.Apply(f.P2, new(1, false, false), f.Rewired), "takeover cannot cancel an existing human transaction");
@@ -201,7 +203,7 @@ try
     Check(Managers.Inst.kingdom.playerOne.wallet.Coins == 10, "expanded operations cannot spend P1 wallet");
     var skill = new SteedAbility(f.P2);
     UnityEngine.Resources.All[typeof(SteedAbility)] = [skill];
-    Thread.Sleep(260);
+    observationTime += 2100;
     var skillState = f.Access.Capture(true);
     var ability = skillState.World!.Abilities!.OfType<Dictionary<string, object?>>().Single(v => v.GetValueOrDefault("kind")?.ToString() == "SteedAbility");
     var skillCommand = drop with { ActionId = Guid.NewGuid().ToString(), Operation = "ability", Ability = ability["ability_id"]!.ToString() };
@@ -226,7 +228,7 @@ try
     f = Fresh();
     for (var index = 0; index < 30; index++) Managers.Inst.enemies.AllEnemies.Add(new Enemy { transform = { position = { x = 1000 + index } } });
     Managers.Inst.payables.AllPayables = Enumerable.Range(0, 30).Select(index => new Payable { Pointer = 500 + index }).ToArray();
-    Thread.Sleep(260);
+    observationTime += 1000;
     var fullWorld = f.Access.Capture(true).World!;
     Check(fullWorld.Enemies!.Length == 30 && fullWorld.Targets!.Length == 30, "full registry observations have no 60-unit or 16-object visibility cutoffs");
     f = Fresh();
@@ -238,7 +240,9 @@ try
     Check(controlledUnit.PayHeld, "native unit held action persists while moving");
     f.Access.Release();
     Check(controlledUnit.Direction == 0 && !controlledUnit.PayHeld, "stop releases both special unit motion and held action");
-    Console.WriteLine($"PASS: {assertions} reflection, ownership and native transaction safeguard assertions (fakes; no game execution).");
+    assertions += PerformanceTests.Run(fixtureRoot);
+    assertions += HomeRangeTests.Run(fixtureRoot);
+    Console.WriteLine($"PASS: {assertions} reflection, ownership, observation cadence and native transaction assertions (fakes; no game execution).");
 }
 finally
 {

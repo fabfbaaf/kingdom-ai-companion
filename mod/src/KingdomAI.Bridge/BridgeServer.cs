@@ -14,7 +14,10 @@ internal sealed class BridgeServer : IDisposable
     private readonly CommandEngine _engine;
     private readonly byte[] _tokenHash;
     private readonly CancellationTokenSource _cancel = new();
-    private volatile string _state;
+    private Observation _observation;
+    private Observation _serializedObservation;
+    private string _state;
+    private readonly object _serializationLock = new();
     private int _coopRequested;
     internal DialogueMailbox Dialogue { get; } = new();
     internal BridgeServer(BridgeConfig config, CommandEngine engine, Observation initial)
@@ -25,6 +28,7 @@ internal sealed class BridgeServer : IDisposable
             || config.Token.Length < 32) throw new InvalidOperationException("桥接配置必须使用 127.0.0.1 HTTP 地址与至少32字符 token");
         _tokenHash = SHA256.HashData(Encoding.UTF8.GetBytes("Bearer " + config.Token));
         _engine = engine;
+        _observation = _serializedObservation = initial;
         _state = Wire.Serialize(initial);
         Dialogue.Observe(initial, Environment.TickCount64);
         _listener.Prefixes.Add(config.BaseUrl.TrimEnd('/') + "/");
@@ -34,7 +38,23 @@ internal sealed class BridgeServer : IDisposable
     internal void Publish(Observation state)
     {
         Dialogue.Observe(state, Environment.TickCount64);
-        _state = Wire.Serialize(state);
+        Volatile.Write(ref _observation, state);
+    }
+    private string SerializedState()
+    {
+        // These are detached managed facts, never Unity/IL2CPP objects. No game
+        // reads or serialization happen in Publish on Unity's main thread.
+        lock (_serializationLock)
+        {
+            var state = Volatile.Read(ref _observation);
+            if (!ReferenceEquals(state, _serializedObservation))
+            {
+                var serialized = Wire.Serialize(state);
+                _state = serialized;
+                _serializedObservation = state;
+            }
+            return _state;
+        }
     }
     internal bool ConsumeCoopRequest() => Interlocked.Exchange(ref _coopRequested, 0) == 1;
     private async Task Listen()
@@ -58,7 +78,7 @@ internal sealed class BridgeServer : IDisposable
                 || !CryptographicOperations.FixedTimeEquals(_tokenHash, SHA256.HashData(Encoding.UTF8.GetBytes(request.Headers["Authorization"] ?? ""))))
                 throw new CommandError(401, "未授权");
             var path = request.Url?.AbsolutePath ?? "";
-            if (request.HttpMethod == "GET" && path == "/state") { await Send(context, 200, _state); return; }
+            if (request.HttpMethod == "GET" && path == "/state") { await Send(context, 200, SerializedState()); return; }
             if (request.HttpMethod == "GET" && path.StartsWith("/commands/", StringComparison.Ordinal))
             {
                 var receipt = _engine.GetReceipt(path[10..]);

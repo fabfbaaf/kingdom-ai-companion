@@ -2,7 +2,7 @@ using System.Text.Json;
 using MelonLoader;
 using MelonLoader.Utils;
 
-[assembly: MelonInfo(typeof(KingdomAI.Bridge.BridgeMod), "Kingdom AI Companion", "0.5.0", "桔梗")]
+[assembly: MelonInfo(typeof(KingdomAI.Bridge.BridgeMod), "Kingdom AI Companion", "0.5.2", "桔梗")]
 [assembly: MelonGame("noio", "KingdomTwoCrowns")]
 
 namespace KingdomAI.Bridge;
@@ -61,8 +61,8 @@ public sealed class BridgeMod : MelonMod
                 _nextObservation = 0;
             }
             if (now < _nextObservation) return;
-            _nextObservation = now + 50;
             var state = _game.Capture(_engine.InputReleased);
+            _nextObservation = now + _game.ObservationIntervalMs;
             if (_bubble.Error.Length > 0)
                 state = state with { Diagnostics = state.Diagnostics.Append(_bubble.Error).ToArray() };
             _lastState = state;

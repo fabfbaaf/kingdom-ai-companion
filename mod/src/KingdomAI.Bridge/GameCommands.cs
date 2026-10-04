@@ -9,12 +9,15 @@ internal sealed partial class GameAccess
 
     private static object? InvokeNative(object obj, string name, params object?[] args)
     {
-        var method = Unique(obj.GetType(), m => m.Name == name && m.GetParameters().Length == args.Length
-            && m.GetParameters().Select((p, i) => args[i] is null ? !p.ParameterType.IsValueType : p.ParameterType.IsInstanceOfType(args[i])).All(v => v));
+        var method = ReflectionCache.Resolve(obj.GetType(), name, args)
+            ?? throw new MissingMethodException(obj.GetType().FullName, name);
         return method.Invoke(obj, args);
     }
     private object? ActiveMap()
     {
+        var game = Read(Read(_managers, "Inst"), "game");
+        if (_scene == "loading" || Int(Read(game, "state")) is 0 or 1 or 32
+            || Bool(Read(_managers, "IsP2Playing")) != true) return null;
         var map = Read(Read(_menu, "Inst"), "ActiveMap");
         var state = Int(Read(Read(_menu, "Inst"), "MapState"));
         return Active(map) && (state is 2 or 3 or 4 || _uiOwned && state == 0) ? map : SceneObjects("Il2Cpp.Map").FirstOrDefault(v => Bool(Read(v, "allowUIInput")) == true);

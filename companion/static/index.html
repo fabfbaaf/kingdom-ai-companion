@@ -57,7 +57,7 @@
       </section>
       </div>
       <aside class="sidebar">
-        <section class="card model-card"><div class="section-head"><div><p class="eyebrow">YOUR MODEL</p><h2>连接你的 AI</h2></div><span id="model-status" class="dot"></span></div>
+        <section class="card model-card"><div class="section-head"><div><p class="eyebrow">YOUR MODEL</p><h2>聊天与默认模型</h2></div><span id="model-status" class="dot"></span></div>
           <form id="model-form">
             <button id="model-deepseek" type="button" class="quiet full preset-button" disabled><span>DeepSeek</span><small>快速填写地址与模型</small></button>
             <label class="field">兼容 API 地址<input id="endpoint" type="url" value="https://api.openai.com/v1" maxlength="2000" placeholder="https://服务地址/v1" required spellcheck="false"></label>
@@ -67,13 +67,32 @@
             <p class="hint">密钥通过当前 Windows 用户的 DPAPI 保存，不会显示在接口或日志中。留空保留原密钥。</p>
             <div class="actions"><button id="save-model" type="submit" class="secondary">保存配置</button><button id="test-model" type="button" class="quiet">测试连接</button></div>
             <p class="hint">测试连接会发送一条模型请求，可能按服务商规则计费；不操作游戏。</p>
+            <p id="model-usage" class="hint">本次后台启动的 token 用量尚未返回；服务商缓存按实际命中计费。</p>
+          </form>
+        </section>
+        <section class="card execution-card"><div class="section-head"><div><p class="eyebrow">PLAY YOUR WAY</p><h2>游玩执行模型</h2></div></div>
+          <p class="hint">可单独用 Ollama 负责自主游玩动作，普通聊天继续使用上面的模型。</p>
+          <form id="execution-form">
+            <label class="field">动作决策来源<select id="execution-provider"><option value="main" selected>使用默认模型</option><option value="ollama">Ollama · 独立执行模型</option></select></label>
+            <div id="execution-fields" hidden>
+              <label class="field">Ollama 服务地址<input id="execution-endpoint" type="url" value="http://127.0.0.1:11434" maxlength="2000" required spellcheck="false"></label>
+              <button id="execution-models-refresh" type="button" class="quiet full">读取已安装模型</button>
+              <label class="field">已安装模型<select id="execution-installed"><option value="">先读取模型列表，或直接填写名称</option></select></label>
+              <label class="field">执行模型名称<input id="execution-model" maxlength="200" placeholder="例如 qwen3:4b，需已在 Ollama 中安装" spellcheck="false"></label>
+              <div class="execution-settings-row"><label class="field">上下文大小<input id="execution-context" type="number" min="2048" max="131072" step="1024" value="8192"></label><label class="field">等待时间（秒）<input id="execution-timeout" type="number" min="15" max="180" value="60"></label></div>
+              <p id="execution-models-note" class="hint" role="status">默认连接本机 11434 端口，不需要 API 密钥。读取列表不会下载或加载模型。</p>
+              <p class="hint">小模型建议先试 8192 上下文；更大的上下文会增加显存占用。首次请求可能需要加载模型，测试连接会实际调用所选模型。</p>
+            </div>
+            <div class="actions"><button id="save-execution" type="submit" class="secondary">保存执行配置</button><button id="test-execution" type="button" class="quiet">测试执行模型</button></div>
+            <p id="execution-note" class="hint" role="status">默认与聊天共用模型。保存后，下次启动自主游玩生效。</p>
+            <p id="execution-usage" class="hint usage-detail">Ollama 执行用量尚未返回。</p>
           </form>
         </section>
         <section class="card manual-card"><p class="eyebrow">CONTROL CHECK</p><h2>手动核对 P2</h2><p class="muted">AI 停止时可测试。左右各 500 ms；勾选允许疾跑后会尝试原生冲刺。付款按当前价格完成一笔原生交易。</p><div class="actions manual-actions"><button id="move-left" class="secondary" disabled>← 左移</button><button id="move-right" class="secondary" disabled>右移 →</button></div><button id="pay-coin" class="quiet full" disabled aria-describedby="manual-pay-note">向当前对象完整付款</button><p id="payable" class="hint">当前支付对象：—</p><p id="manual-pay-note" class="hint payment-reason">正在检查手动付款条件。</p></section>
       </aside>
       <section class="card diagnostics-card"><div class="section-head"><div><p class="eyebrow">LOCAL CONNECTION</p><h2>连接与执行诊断</h2></div><span id="game-version" class="muted">未读取游戏版本</span></div><p id="bridge-detail" class="diagnostic-message">正在读取桥接状态…</p><div class="diagnostic-grid"><div><span>场景</span><b id="scene">—</b></div><div><span>可用操作</span><b id="capabilities">—</b></div><div><span>输入状态</span><b id="input-state">—</b></div><div><span>最近结果</span><b id="last-result">—</b></div></div><ul id="diagnostics"></ul></section>
     </main>
-    <footer><span>本机控制 · P2 独立输入 · 原有游戏规则</span><span>Kingdom AI Companion <b>0.5.0</b> <button id="shutdown" class="quiet">退出后台</button></span></footer>
+    <footer><span>本机控制 · P2 独立输入 · 原有游戏规则</span><span>Kingdom AI Companion <b>0.5.3</b> <button id="shutdown" class="quiet">退出后台</button></span></footer>
   </div>
 </body>
 </html>

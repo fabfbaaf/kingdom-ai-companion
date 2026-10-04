@@ -21,6 +21,7 @@ from companion.contracts import Decision, GameState, StartRequest
 from companion.gameplay_context import action_summary, fresh
 from companion.memory import GameplayMemory
 from companion.model import ModelClient, ModelError
+from companion.territory import territory_context
 
 
 class ControlError(RuntimeError):
@@ -170,6 +171,7 @@ class ControlManager:
                 "last_action": action_summary(self.last_result), "current_action": current,
                 "recent_actions": list(self.recent_actions),
                 "memory": self.memory.public(), "plan": self.memory.planner.public(),
+                "territory": territory_context(state) if fresh(state) else None,
                 "payment_cooldowns": [{"target_id": target, "remaining_seconds": round(until - time.monotonic(), 1)}
                                       for target, until in self.payment_cooldowns.items() if until > time.monotonic()],
                 "scene": state.scene if fresh(state) else None,
@@ -308,7 +310,7 @@ class ControlManager:
                 raise ControlError("开始操作已被后续停止或关闭监听撤销")
             self._available()
             epoch = self.generation
-            if request.mode == "autonomous" and not self.store.settings.model:
+            if request.mode == "autonomous" and not self.store.public()["execution_configured"]:
                 raise ControlError("自主模式需要先保存模型配置；跟随模式无需模型")
             state = await self._state()
             playable(state, "move")

@@ -49,7 +49,7 @@ test("independent P2 and continuous play are defaults without an automatic contr
   assert.equal(ui.elements.get("continuous-play").checked,true);assert.equal(ui.elements.get("coin-budget").value,"0");
   assert.match(ui.elements.get("play-style-note").textContent,/P1 始终由你手动控制.*P1 未操作时 P2 也可行动.*暂停或进入菜单/);
   assert.match(ui.elements.get("play-style-status").textContent,/尚未启动.*草稿/);
-  assert.equal(writes(ui).length,0);assert.match(markup,/0\.5\.0/);
+  assert.equal(writes(ui).length,0);assert.match(markup,/Kingdom AI Companion <b>\d+\.\d+\.\d+/);
 });
 
 test("selecting a play style replaces only the previous unchanged default goal",async()=>{

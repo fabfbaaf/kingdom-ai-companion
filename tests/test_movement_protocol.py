@@ -41,7 +41,7 @@ def test_live_motion_context_sent_without_untrusted_extra_fields(tmp_path):
 
         def handler(request):
             payload = json.loads(request.content)
-            packet = json.loads(payload["messages"][1]["content"])
+            packet = json.loads(payload["messages"][-1]["content"])
             assert packet["in_flight"] == {"direction": "right", "sprint": True,
                                             "remaining_ms": 1500}
             assert "P2.can_sprint" in payload["messages"][0]["content"]

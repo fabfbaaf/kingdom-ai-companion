@@ -118,14 +118,14 @@ def test_chat_context_is_bounded_and_excludes_secrets(tmp_path):
             payload = json.loads(request.content)
             assert payload["max_tokens"] == 4096
             assert payload["thinking"] == {"type": "disabled"}
-            data = json.loads(payload["messages"][1]["content"])
+            data = json.loads(payload["messages"][-1]["content"])
             assert data["user_text"] == "陪我聊聊"
             assert data["state"] is None
             assert len(data["history"]) == 11
             assert all(item["role"] in {"user", "assistant"} for item in data["history"])
             assert len(data["history"][0]["content"]) == 1500
             assert data["control"] == {"mode": "idle", "coin_budget_remaining": 7}
-            assert "synthetic-private-key" not in payload["messages"][1]["content"]
+            assert "synthetic-private-key" not in payload["messages"][-1]["content"]
             return completion('{"reply":"我在。先陪你走一会儿。","intent":"chat"}')
 
         model = ModelClient(make_store(tmp_path),

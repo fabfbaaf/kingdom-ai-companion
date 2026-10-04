@@ -50,7 +50,7 @@ test("idle zero-budget Tower2 shows both missing authorization and its actual pa
   assert.match(ui.elements.get("payment-target-note").textContent,/Tower2 当前不可支付/);
   assert.match(ui.elements.get("manual-pay-note").textContent,/Tower2 当前不可支付/);
   assert.equal(ui.elements.get("pay-coin").disabled,true);assert.equal(ui.elements.get("follow").disabled,false);assert.equal(ui.elements.get("autonomous").disabled,false);
-  assert.equal(writes(ui).length,0);assert.match(markup,/0\.5\.0/);
+  assert.equal(writes(ui).length,0);assert.match(markup,/Kingdom AI Companion <b>\d+\.\d+\.\d+/);
 });
 
 test("budget and target edits update a draft immediately without authorizing or starting anything",async()=>{

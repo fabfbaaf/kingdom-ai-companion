@@ -125,9 +125,108 @@ const actionControls = ["follow", "autonomous", "move-left", "move-right", "pay-
   "open-coop", "save-model", "test-model", "save-directory", "detect-game",
   "launch-game"];
 
+test("execution defaults preserve the main model without discovery, downloads or inference", async()=>{
+  const ui=await uiFixture();
+  assert.equal(ui.elements.get("execution-provider").value,"main");
+  assert.equal(ui.elements.get("execution-fields").hidden,true);
+  assert.equal(ui.elements.get("test-execution").disabled,false);
+  assert.equal(ui.calls.some(call=>call.url.startsWith("/api/execution")),false);
+});
+
+test("unsaved Ollama draft survives polling and blocks start and connection test", async()=>{
+  const ui=await uiFixture();
+  ui.elements.get("execution-provider").value="ollama";
+  await ui.fire("execution-provider","input");
+  ui.elements.get("execution-model").value="draft:4b";
+  await ui.fire("execution-model","input");
+  await ui.fire("refresh");
+  assert.equal(ui.elements.get("execution-provider").value,"ollama");
+  assert.equal(ui.elements.get("execution-model").value,"draft:4b");
+  assert.equal(ui.elements.get("execution-fields").hidden,false);
+  assert.equal(ui.elements.get("autonomous").disabled,true);
+  assert.equal(ui.elements.get("test-execution").disabled,true);
+  const count=ui.calls.length;
+  await ui.fire("test-execution");
+  assert.equal(ui.calls.length,count);
+});
+
+test("Ollama discovery renders literal model names and never selects or starts a model", async()=>{
+  const ui=await uiFixture();
+  ui.elements.get("execution-provider").value="ollama";
+  await ui.fire("execution-provider","input");
+  ui.queue("/api/execution/models",response({models:[{name:"<fixture>:4b",parameter_size:"4B",quantization:"Q4_K_M"}],message:"read"}));
+  await ui.fire("execution-models-refresh");
+  const option=ui.elements.get("execution-installed").children[1];
+  assert.equal(option.value,"<fixture>:4b");
+  assert.match(option.textContent,/<fixture>:4b.*Q4_K_M/);
+  assert.equal(ui.elements.get("execution-model").value,"");
+  ui.elements.get("execution-installed").value="<fixture>:4b";
+  await ui.fire("execution-installed","change");
+  assert.equal(ui.elements.get("execution-model").value,"<fixture>:4b");
+  assert.equal(ui.calls.filter(call=>call.url==="/api/execution/models").length,1);
+  assert.equal(ui.calls.some(call=>call.url==="/api/execution/test"||call.url==="/api/control/start"),false);
+});
+
+test("saving optional local execution keeps chat settings and permits play without a main model", async()=>{
+  const ui=await uiFixture();
+  const status=readyStatus();
+  status.model.configured=false;
+  status.model.execution_configured=true;
+  status.model.execution={provider:"ollama",endpoint:"http://127.0.0.1:11434",model:"fixture:4b",context_tokens:8192,timeout_seconds:60};
+  ui.elements.get("execution-provider").value="ollama";
+  await ui.fire("execution-provider","input");
+  ui.elements.get("execution-model").value="fixture:4b";
+  ui.queue("/api/execution",response(status.model));
+  ui.queue("/api/status",response(status));
+  await ui.fire("execution-form","submit");
+  const request=ui.calls.find(call=>call.url==="/api/execution");
+  const body=JSON.parse(request.options.body);
+  assert.deepEqual(body,{provider:"ollama",endpoint:"http://127.0.0.1:11434",model:"fixture:4b",context_tokens:8192,timeout_seconds:60});
+  assert.equal("api_key" in body,false);
+  assert.equal(ui.elements.get("autonomous").disabled,false);
+  assert.equal(ui.elements.get("test-execution").disabled,false);
+  assert.match(ui.elements.get("execution-note").textContent,/聊天使用默认模型/);
+});
+
+test("execution selector and tests lock during active play and backend loss", async()=>{
+  const ui=await uiFixture();
+  const running=readyStatus();running.control.running=true;running.control.mode="autonomous";
+  ui.queue("/api/status",response(running));await ui.fire("refresh");
+  for(const id of ["execution-provider","save-execution","test-execution","execution-models-refresh"]) assert.equal(ui.elements.get(id).disabled,true);
+  ui.queue("/api/status",()=>Promise.reject(new Error("connection lost")));await ui.fire("refresh");
+  for(const id of ["execution-provider","save-execution","test-execution"]) assert.equal(ui.elements.get(id).disabled,true);
+  assert.equal(ui.elements.get("stop").disabled,false);
+});
+
+test("local and compatible provider cache use is displayed separately with unknown data intact", async()=>{
+  const ui=await uiFixture();const status=readyStatus();
+  status.model.usage={routes:[
+    {lane:"chat",provider:"main",model:"cloud",reported_requests:1,prompt_tokens:1000,completion_tokens:20,cache_hit_ratio:.8,cache_hit_tokens:800,cache_miss_tokens:200},
+    {lane:"decision",provider:"ollama",model:"local:4b",reported_requests:1,prompt_tokens:400,completion_tokens:8,cache_hit_ratio:null},
+  ]};
+  ui.queue("/api/status",response(status));await ui.fire("refresh");
+  assert.match(ui.elements.get("model-usage").textContent,/80\.0%.*800.*200/);
+  assert.doesNotMatch(ui.elements.get("model-usage").textContent,/local:4b/);
+  assert.match(ui.elements.get("execution-usage").textContent,/Ollama local:4b.*未返回缓存用量/);
+});
+
 function assertLocked(ui, ids = actionControls) {
   for (const id of ids) assert.equal(ui.elements.get(id).disabled, true, `${id} must stay locked`);
 }
+
+test("provider usage shows current process totals and leaves absent cache data unknown", async () => {
+  const ui=await uiFixture();
+  const value=readyStatus();
+  value.model.usage={reported_requests:2,prompt_tokens:2000,completion_tokens:60,cache_hit_ratio:0.8};
+  ui.queue("/api/status",response(value));
+  await ui.fire("refresh");
+  assert.match(ui.elements.get("model-usage").textContent,/80\.0%/);
+  assert.match(ui.elements.get("model-usage").textContent,/本次启动/);
+  value.model.usage.cache_hit_ratio=null;
+  ui.queue("/api/status",response(value));
+  await ui.fire("refresh");
+  assert.match(ui.elements.get("model-usage").textContent,/未返回缓存用量/);
+});
 
 test("operation followed by lost backend cannot restore old ready controls", async () => {
   const ui = await uiFixture();

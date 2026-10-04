@@ -180,6 +180,7 @@ client.DefaultRequestHeaders.Remove("Origin");
 client.DefaultRequestHeaders.Authorization = null;
 Check((await client.PostAsJsonAsync("/dialogue", dialogue)).StatusCode == HttpStatusCode.Unauthorized, "dialogue requires existing bridge token");
 checks += DialogueTests.Run(state);
+checks += await SnapshotTests.Run(state);
 var expanded = state with { Capabilities = ["move", "move_to", "sprint", "pay", "drop", "ability", "map", "sail", "extended_world"],
     Players = [state.Players[0], p2 with { Coins = 100, Currencies = new() { ["coins"] = 100, ["gems"] = 50 }, CurrentPayable = target with { Currency = "gems", Price = 30 } }] };
 var extendedEngine = new CommandEngine(); extendedEngine.Observe(expanded);

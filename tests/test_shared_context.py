@@ -58,10 +58,10 @@ def test_shared_context_whitelist_and_verified_history(tmp_path):
 
         def handler(request):
             payload = json.loads(request.content)
-            packet = json.loads(payload["messages"][1]["content"])
+            packet = json.loads(payload["messages"][-1]["content"])
             observed.append(packet["context"])
-            assert "secret" not in payload["messages"][1]["content"]
-            assert "private-id" not in payload["messages"][1]["content"]
+            assert "secret" not in payload["messages"][-1]["content"]
+            assert "private-id" not in payload["messages"][-1]["content"]
             if payload["max_tokens"] == 4096:
                 return completion('{"reply":"在往右走，付款还没有核验。","intent":"chat"}')
             return completion('{"operation":"stop"}')
@@ -70,7 +70,10 @@ def test_shared_context_whitelist_and_verified_history(tmp_path):
         model.set_context_provider(lambda: context)
         await model.decide(GameState.model_validate(state_data()), goal="守右边", coin_budget=0)
         await model.chat("刚做了什么？", [], None, {"context": context})
-        assert observed[0] == safe_context(context)
+        action_context = dict(observed[0])
+        territory = action_context.pop("territory")
+        assert territory["bounds_status"] == "unknown" and territory.get("center_x") is None
+        assert action_context == safe_context(context)
         assert observed[1] == {**safe_context(context), "stale": True}
         await model.close()
 

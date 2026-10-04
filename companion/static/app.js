@@ -3,6 +3,7 @@
 const $ = (id) => document.getElementById(id);
 let session = "", latest = null, refreshing = false, busy = false, modelDirty = false;
 let backendConnected = false, shuttingDown = false, dialogueRefreshing = false, dialogueEpoch = 0;
+let executionDirty = false;
 const frontendSubscribers=new Set();
 const names = {move_to:"移动到目的地",drop:"丢币",ability:"使用技能",map:"地图操作",sail:"出航",extended_world:"全场状态",pay_currency:"多币种付款",idle:"已停止",follow:"正在跟随",autonomous:"自主陪玩中",manual:"手动操作中",move:"移动",move_long:"长段移动",sprint:"疾跑",stop:"停止",pay:"付款",pay_coin:"单枚付款",completed:"输入结束",verified:"已核验",unverified:"待观察",unknown:"反馈未返回",failed:"本轮失败",cancelled:"已取消",stopped:"已停止",waiting:"等待下一帧"};
 const campaignGoal="自主完成当前战役：依据真实地图、资源、建设、兵力、任务和岛屿进度，发展经济与防御、清除贪婪威胁、准备出航并推进各岛目标；以游戏报告战役完成为准，自主使用当前货币和技能。";
@@ -52,6 +53,40 @@ function applyModel(value) {
   $("model-status").classList.toggle("good", value.configured);
   $("api-key").placeholder = value.key_present ? "已保护保存 · 留空保留" : "输入密钥（本地服务可留空）";
   if (!modelDirty) { $("endpoint").value=value.endpoint; $("model").value=value.model; }
+}
+
+function executionFields(locked=false) {
+  const local=$("execution-provider").value==="ollama";
+  $("execution-fields").hidden=!local;
+  $("execution-model").required=local;
+  for(const id of ["execution-endpoint","execution-model","execution-context","execution-timeout","execution-installed","execution-models-refresh"]) $(id).disabled=locked||!local;
+}
+
+function applyExecution(value, locked) {
+  const settings=value.execution||{provider:"main",endpoint:"http://127.0.0.1:11434",model:"",context_tokens:8192,timeout_seconds:60};
+  if(!executionDirty){
+    $("execution-provider").value=settings.provider;
+    $("execution-endpoint").value=settings.endpoint;
+    $("execution-model").value=settings.model;
+    $("execution-context").value=settings.context_tokens;
+    $("execution-timeout").value=settings.timeout_seconds;
+  }
+  $("execution-provider").disabled=$("save-execution").disabled=locked;
+  $("test-execution").disabled=locked||executionDirty||!(value.execution_configured??value.configured);
+  executionFields(locked);
+  $("execution-note").textContent=executionDirty ? "执行配置有未保存的修改；保存后再测试或开始游玩。" : settings.provider==="ollama" ? `已保存 · 动作决策使用 Ollama ${settings.model}；聊天使用默认模型。` : "已保存 · 动作决策与聊天共用默认模型。";
+}
+
+function usageText(usage,label="本次启动") {
+  if(!usage||usage.reported_requests<1)return `${label} · token 用量尚未返回。`;
+  const cache=typeof usage.cache_hit_ratio==="number" ? `缓存命中 ${(usage.cache_hit_ratio*100).toFixed(1)}%${typeof usage.cache_hit_tokens==="number" ? ` · 命中 ${usage.cache_hit_tokens.toLocaleString()} / 未命中 ${usage.cache_miss_tokens.toLocaleString()}` : ""}` : "服务商未返回缓存用量";
+  return `${label} · 输入 ${Number(usage.prompt_tokens).toLocaleString()} · 输出 ${Number(usage.completion_tokens).toLocaleString()} token · ${cache}`;
+}
+
+function renderUsage(usage) {
+  const routes=usage?.routes;
+  $("model-usage").textContent=Array.isArray(routes)&&routes.length ? routes.filter(item=>item.provider!=="ollama").map(item=>usageText(item,`本次启动 · ${item.lane==="chat" ? "聊天/连接测试" : "默认执行"} ${item.model}`)).join("\n")||"默认模型尚无请求用量。" : usageText(usage);
+  $("execution-usage").textContent=Array.isArray(routes) ? routes.filter(item=>item.provider==="ollama").map(item=>usageText(item,`本次启动 · Ollama ${item.model}`)).join("\n")||"Ollama 执行用量尚未返回；本地缓存不属于云端计费缓存。" : "Ollama 执行用量尚未返回。";
 }
 
 function paymentIssue(state, p2) {
@@ -119,7 +154,8 @@ function renderPayment(value, ready) {
 }
 
 function lockControls(all=false) {
-  for(const id of ["follow","autonomous","move-left","move-right","pay-coin","open-coop","save-model","test-model","model-deepseek","save-directory","detect-game","launch-game"]) $(id).disabled=true;
+  for(const id of ["follow","autonomous","move-left","move-right","pay-coin","open-coop","save-model","test-model","model-deepseek","save-directory","detect-game","launch-game","save-execution","test-execution","execution-provider"]) $(id).disabled=true;
+  executionFields(true);
   if(all) for(const id of ["stop","refresh","shutdown"]) $(id).disabled=true;
   $("manual-pay-note").textContent=all ? "后台正在退出，付款已停用。" : "后台连接中断，手动付款暂不可用。";
   $("payment-target-note").textContent=all ? "后台正在退出，付款已停用。" : "后台连接中断，付款状态暂不可用。";
@@ -147,6 +183,7 @@ async function refreshDialogueStatus() {
 function render(value) {
   if(shuttingDown){lockControls(true);return;}
   latest = value;
+  renderUsage(value.model?.usage);
   const bridge=value.bridge, state=bridge.state, control=value.control;
   const p1=state?.players.find((item)=>item.player_id===0), p2=state?.players.find((item)=>item.player_id===1);
   const age=state ? (Date.now()-Date.parse(state.captured_at))/1000 : Infinity;
@@ -186,7 +223,7 @@ function render(value) {
   const locked=busy||control.running||unavailable;
   const canMove=ready&&p2?.x!=null&&p2.transaction_pending===false&&state.capabilities.includes("move");
   $("follow").disabled=locked||!canMove||!p1||p1.x==null;
-  $("autonomous").disabled=locked||!canMove||!value.model.configured;
+  $("autonomous").disabled=locked||!canMove||!(value.model.execution_configured??value.model.configured)||executionDirty;
   $("move-left").disabled=$("move-right").disabled=locked||!canMove;
   renderPayment(value,ready);
   renderPlayStyle(value);
@@ -198,6 +235,7 @@ function render(value) {
   $("coop-result").textContent=state?.coop_request_result||"合作提示会暂停 AI；仍需在游戏中完成官方确认与外观选择。";
   $("stop").disabled=false;
   applyModel(value.model);
+  applyExecution(value.model,busy||control.running||unavailable);
   notifyFrontend();
 }
 
@@ -218,6 +256,7 @@ async function operate(operation, message) {
 }
 
 function start(mode) {
+  if(mode==="autonomous"&&executionDirty)throw new Error("请先保存执行配置，再开始自主游玩。");
   const continuous=mode==="autonomous"&&$("continuous-play").checked;
   const count=Number($("decision-budget").value);
   const decisionBudget=(continuous||mode==="follow")&&(!Number.isInteger(count)||count<1||count>100) ? 30 : count;
@@ -256,6 +295,23 @@ $("model-form").addEventListener("submit",event=>{
   operate(async()=>{const value=await api("/api/model",{method:"PUT",body:JSON.stringify(body)});$("api-key").value="";$("clear-key").checked=false;modelDirty=false;applyModel(value);return value;},"模型配置已保存。");
 });
 $("test-model").addEventListener("click",()=>operate(()=>api("/api/model/test",{method:"POST"}),"模型连接正常。"));
+
+for(const id of ["execution-provider","execution-endpoint","execution-model","execution-context","execution-timeout"]) $(id).addEventListener("input",()=>{executionDirty=true;if(latest)render(latest);});
+$("execution-installed").addEventListener("change",()=>{if($("execution-installed").value){$("execution-model").value=$("execution-installed").value;executionDirty=true;if(latest)render(latest);}});
+$("execution-models-refresh").addEventListener("click",()=>{if($("execution-models-refresh").disabled)return;return operate(async()=>{
+  const value=await api("/api/execution/models",{method:"POST",body:JSON.stringify({endpoint:$("execution-endpoint").value.trim()})});
+  const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="选择已安装模型";
+  const options=(value.models||[]).map(item=>{const option=document.createElement("option");option.value=item.name;option.textContent=`${item.name}${item.parameter_size ? " · "+item.parameter_size : ""}${item.quantization ? " · "+item.quantization : ""}`;return option;});
+  $("execution-installed").replaceChildren(placeholder,...options);
+  $("execution-installed").value=(value.models||[]).some(item=>item.name===$("execution-model").value) ? $("execution-model").value : "";
+  $("execution-models-note").textContent=value.models?.length ? `已找到 ${value.models.length} 个模型，请选择并保存。` : value.message;
+  return value;
+},"已读取 Ollama 模型列表。");});
+$("execution-form").addEventListener("submit",event=>{event.preventDefault();if($("save-execution").disabled)return;
+  const body={provider:$("execution-provider").value,endpoint:$("execution-endpoint").value.trim(),model:$("execution-model").value.trim(),context_tokens:Number($("execution-context").value),timeout_seconds:Number($("execution-timeout").value)};
+  return operate(async()=>{const value=await api("/api/execution",{method:"PUT",body:JSON.stringify(body)});executionDirty=false;applyExecution(value,false);return value;},"执行配置已保存，下次自主游玩使用所选模型。");
+});
+$("test-execution").addEventListener("click",()=>{if($("test-execution").disabled)return;return operate(()=>api("/api/execution/test",{method:"POST"}),"执行模型连接正常。");});
 $("detect-game").addEventListener("click",()=>operate(async()=>{
   const value=await api("/api/installation/detect",{method:"POST"});
   const candidates=value.candidates;

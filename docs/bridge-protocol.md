@@ -1,4 +1,4 @@
-# 游戏桥接协议 · 0.5.0
+# 游戏桥接协议 · 0.5.2
 
 目标为 Kingdom Two Crowns 2.4.2，Windows x64，本机合作，用户 P1、AI P2。
 协议不改变存档、钱包或坐标；操作通过游戏本身输入链执行。
@@ -16,7 +16,7 @@
 
 ```json
 {
-  "bridge_version": "0.5.0",
+  "bridge_version": "0.5.2",
   "game_version": "2.4.2",
   "session_id": "每次启动、场景或受控角色更换产生的新标识",
   "observation_seq": 1,
@@ -50,7 +50,15 @@
 
 语音设备接口：需要页面会话的 `GET /api/voice/devices` 只枚举输入设备，`PUT /api/voice/device` 接受 `{"device":null}` 或非负整数设备编号。选择不打开麦克风，监听中禁止换设备。偏好按名称/音频后端保存，重新枚举时恢复新编号。`GET /api/voice/status` 额外返回 level、peak、last_audio_at、overflows、error_code 和 device_error。完整语音等待队列按顺序处理；队列满或事件丢失在 `/api/chat` 的 voice_error/voice_dropped 中报告，voice_queued 给出等待句数。
 
-`world` 增加 `campaign`（主题、岛屿、通关/失败、解锁与已访问记录）、`environment`（季节、时间、边界）、`targets`、`enemies`、`dropped_items`、`units`、`structures`、`abilities`、`quests`、`ui` 和 `control`。全场对象来自当前加载岛屿的注册表；世界扫描缓存 250 ms，玩家及控制状态约每 50 ms 更新。原有 nearby 数组保留兼容，当前也返回全场记录。未加载岛屿不伪造实时对象；不可读字段为 null。
+`world` 增加 `campaign`（主题、岛屿、通关/失败、解锁与已访问记录）、`environment`（季节、时间、边界）、`targets`、`enemies`、`dropped_items`、`units`、`structures`、`abilities`、`quests`、`ui` 和 `control`。全场对象来自当前加载岛屿的注册表，不按距离或对象数量裁切。未加载岛屿不伪造实时对象；不可读字段为 null。
+
+0.5.1 桥接分开刷新观测：可操作时 P2 钱包、选中付款对象、菜单和控制状态约 50 ms；敌人、掉落物和已发现技能的状态约 250 ms；全场付款对象、兵力、建筑和战役信息约 1 秒；场景对象发现缓存 2 秒。`environment.observed_at` 表示慢速世界信息的观测时间，不保证所有数组与 `captured_at` 同时采样。场景、P2、坐骑变化或恢复游玩会重建相应缓存，旧场景对象不会带入新岛。
+
+0.5.2 修复 `Sided<float>` 泛型字段生成路径重复装箱导致的边界失真，通过原生 `Item[Side.Left/Right]` 获取三个范围：`world_bounds` 是岛屿、`borders` 是营地、`intact_borders` 是完好防线。范围不可读、左右相等或顺序颠倒时返回 null，不制造半径。后台 `context.territory` 结合城堡位置验证范围，给模型目标附 `region`、`distance_from_camp` 和建筑的 `purpose`（营地建设或扩张）；未知和矛盾范围如实标记，分类不作为禁止动作的规则。
+
+模型输入使用独立的精简表示，原始桥接协议不变：重复的 nearby 数组和诊断文字不再传给模型，null 字段省略代表未知；固定 `world_catalog.targets` 按 target_id 排序，存名称、类型、下一建筑，动态 `state.world.targets` 按相同 ID 引用，保留本轮位置、价格、可支付状态和区域。聊天与决策均使用这份当前观测，固定目录重新生成，不复用旧决定。服务商缓存是尽力而为的前缀复用，不能保证命中率。
+
+加载、过场、无本地合作 P2 和暂停时不扫描全场；暂停地图保留同一场景的历史快照并继续读取菜单，支持原生地图关闭、选择和确认。非可操作时轻量状态约 250 ms，F8 与释放请求仍逐帧检查。HTTP 线程按需序列化已分离的托管快照并复用结果，不读取游戏对象；主线程发布状态不再序列化整个世界。
 输入能力实际可用后才能出现在 `capabilities` 中：`move`、`move_long`、`sprint`、`stop`、`pay`、`pay_coin`。
 `extended_world` 标识 0.4.0 扩展。增加 `move_to`、`drop`、`ability`、`map`、`sail`、`pay_currency`。`move_long` 保留兼容，0.4.0 不再有 5000 ms 上限。
 

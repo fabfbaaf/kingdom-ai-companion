@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from companion.bridge import BridgeClient, BridgeError
-from companion.config import ConfigError, ModelConfigStore, ModelSettings
+from companion.config import ConfigError, ExecutionSettings, ModelConfigStore, ModelSettings
 from companion.contracts import Decision, StartRequest
 from companion.controller import ActionJournal, ControlError, ControlManager
 from companion.conversation import Conversation, quick_intent
@@ -54,6 +54,16 @@ class ChatRequest(BaseModel):
         if not value.strip():
             raise ValueError("empty message")
         return value.strip()
+
+
+class OllamaDiscoveryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    endpoint: str = Field(default="http://127.0.0.1:11434", max_length=2000)
+
+    @field_validator("endpoint")
+    @classmethod
+    def valid_endpoint(cls, value):
+        return ExecutionSettings(endpoint=value).endpoint
 
 
 class SpeechSettings(BaseModel):
@@ -210,7 +220,8 @@ def create_app(*, bridge_config: Path | None = None, store: ModelConfigStore | N
         except BridgeError as exc:
             error = str(exc)
         return {"bridge": {"connected": state is not None, "state": state, "error": error},
-                "control": manager.status(), "model": store.public(),
+                "control": manager.status(), "model": {**store.public(),
+                    "usage": model.usage_status() if hasattr(model, "usage_status") else None},
                 "validation": {"real_game_verified": False,
                                "notice": "开发预览：尚未完成真实存档与另一台电脑的陪玩验收"}}
 
@@ -230,6 +241,27 @@ def create_app(*, bridge_config: Path | None = None, store: ModelConfigStore | N
             raise ControlError("请先停止游玩再测试模型连接")
         await model.test()
         return {"connected": True, "message": "模型已返回合法 stop 测试指令；未执行游戏操作"}
+
+    @app.get("/api/execution", dependencies=protected)
+    async def execution_config():
+        return store.public()["execution"]
+
+    @app.put("/api/execution", dependencies=protected)
+    async def update_execution(value: ExecutionSettings):
+        if manager.status()["running"]:
+            raise ControlError("请先停止游玩再切换执行模型")
+        return store.update_execution(value)
+
+    @app.post("/api/execution/models", dependencies=protected)
+    async def execution_models(value: OllamaDiscoveryRequest):
+        return await model.list_execution_models(value.endpoint)
+
+    @app.post("/api/execution/test", dependencies=protected)
+    async def test_execution():
+        if manager.status()["running"]:
+            raise ControlError("请先停止游玩再测试执行模型")
+        await model.test_execution()
+        return {"connected": True, "message": "执行模型已返回合法 stop 指令；未操作游戏"}
 
     @app.post("/api/control/start", dependencies=protected)
     async def start(value: StartRequest):

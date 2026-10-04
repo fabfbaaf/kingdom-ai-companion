@@ -124,7 +124,7 @@ def test_decision_and_chat_receive_independent_style_without_new_authority(tmp_p
 
         def handler(request):
             data = json.loads(request.content)
-            packets.append((data["messages"][0]["content"], json.loads(data["messages"][1]["content"])))
+            packets.append((data["messages"][0]["content"], json.loads(data["messages"][-1]["content"])))
             reply = ('{"reply":"我自己巡视，你歇着吧。","intent":"chat"}'
                      if data["max_tokens"] == 4096 else '{"operation":"stop"}')
             return httpx.Response(200, json={"choices": [{"finish_reason": "stop",

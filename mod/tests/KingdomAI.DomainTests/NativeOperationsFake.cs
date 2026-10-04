@@ -1,5 +1,13 @@
 namespace Il2Cpp;
 
+public sealed class Tower
+{
+    public nint Pointer { get; } = 170;
+    public UnityEngine.GameObject gameObject { get; } = new();
+    public UnityEngine.Transform transform { get; } = new();
+    public string name { get; } = "test tower";
+}
+
 public sealed class CampaignSaveData
 {
     public static CampaignSaveData current { get; set; } = new();

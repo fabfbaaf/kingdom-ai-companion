@@ -25,3 +25,5 @@
 .strategy-panel summary { cursor: pointer; font-size: 13px; color: #d2dac5; }
 .strategy-panel .hint { overflow-wrap: anywhere; }
 .interface-facts pre { max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; padding: 12px; background: rgba(0,0,0,.15); border-radius: 8px; }
+
+.execution-settings-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.execution-card select{width:100%;border:1px solid #415044;border-radius:10px;background:#111b16;color:var(--ink);padding:10px 12px;min-height:42px;font-size:13px}.execution-card .full{margin:0 0 15px}.execution-card form{margin-top:18px}#model-usage,#execution-usage{white-space:pre-line;overflow-wrap:anywhere}

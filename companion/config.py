@@ -10,13 +10,52 @@ import secrets
 from collections.abc import Callable
 from ctypes import wintypes
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ConfigError(ValueError):
     pass
+
+
+def http_endpoint(value: str) -> str:
+    value = value.strip().rstrip("/")
+    parsed = urlsplit(value)
+    if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+            or parsed.username or parsed.password or parsed.query or parsed.fragment):
+        raise ValueError("模型地址需为 HTTP(S) 地址，不能包含账号、查询参数或片段")
+    return value
+
+
+class ExecutionSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    provider: Literal["main", "ollama"] = "main"
+    endpoint: str = Field(default="http://127.0.0.1:11434", max_length=2000)
+    model: str = Field(default="", max_length=200)
+    context_tokens: int = Field(default=8192, ge=2048, le=131072)
+    timeout_seconds: int = Field(default=60, ge=15, le=180)
+
+    @field_validator("endpoint")
+    @classmethod
+    def valid_endpoint(cls, value: str) -> str:
+        value = http_endpoint(value)
+        for suffix in ("/v1/chat/completions", "/api/chat", "/api/tags", "/v1", "/api"):
+            if value.endswith(suffix):
+                return value[:-len(suffix)]
+        return value
+
+    @field_validator("model")
+    @classmethod
+    def valid_model(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def selected_model(self):
+        if self.provider == "ollama" and not self.model:
+            raise ValueError("使用 Ollama 执行时请选择或填写已安装的模型名称")
+        return self
 
 
 class ModelSettings(BaseModel):
@@ -24,16 +63,12 @@ class ModelSettings(BaseModel):
     endpoint: str = Field(default="https://api.openai.com/v1", max_length=2000)
     model: str = Field(default="", max_length=200)
     api_key: str | None = Field(default=None, max_length=4096, repr=False, exclude=True)
+    execution: ExecutionSettings = Field(default_factory=ExecutionSettings)
 
     @field_validator("endpoint")
     @classmethod
     def valid_endpoint(cls, value: str) -> str:
-        value = value.strip().rstrip("/")
-        parsed = urlsplit(value)
-        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
-                or parsed.username or parsed.password or parsed.query or parsed.fragment):
-            raise ValueError("模型地址需为 HTTP(S) 地址，不能包含账号、查询参数或片段")
-        return value
+        return http_endpoint(value)
 
     @field_validator("model")
     @classmethod
@@ -115,9 +150,15 @@ class ModelConfigStore:
     def public(self) -> dict:
         return {"endpoint": self.settings.endpoint, "model": self.settings.model,
                 "key_present": bool(self.settings.api_key),
-                "configured": bool(self.settings.model), "error": self.load_error}
+                "configured": bool(self.settings.model), "error": self.load_error,
+                "execution": self.settings.execution.model_dump(),
+                "execution_configured": bool(self.settings.execution.model) if
+                    self.settings.execution.provider == "ollama" else bool(self.settings.model)}
 
     def update(self, value: ModelSettings) -> dict:
+        # Older clients edit only the main provider. Preserve the optional route.
+        if "execution" not in value.model_fields_set:
+            value.execution = self.settings.execution.model_copy(deep=True)
         key = self.settings.api_key if value.api_key is None else value.api_key.strip()
         protected = self.protect(key.encode()) if key else None
         encoded = value.model_dump()
@@ -133,3 +174,8 @@ class ModelConfigStore:
         self.settings = value
         self.load_error = None
         return self.public()
+
+    def update_execution(self, value: ExecutionSettings) -> dict:
+        settings = self.settings.model_copy(deep=True)
+        settings.execution = value
+        return self.update(settings)

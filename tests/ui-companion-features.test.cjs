@@ -73,7 +73,7 @@ test("polling only reads speech and notices; context renders literal verified in
   assert.equal(ui.elements.get("speech-enabled").checked,false);assert.equal(ui.elements.get("notices-enabled").checked,false);
   assert.equal(ui.elements.get("companion-task").textContent,content);assert.equal(ui.elements.get("companion-action").textContent,content);
   assert.equal(ui.elements.get("companion-context-detail").textContent,content);assert.match(ui.elements.get("chat-queue").textContent,/排队 2 \/ 3/);
-  assert.match(markup,/0\.5\.0/);assert.match(markup,/没有回声消除/);
+  assert.match(markup,/Kingdom AI Companion <b>\d+\.\d+\.\d+/);assert.match(markup,/没有回声消除/);
 });
 
 test("chat admits one active and three queued requests without locking the draft or game stop",async()=>{

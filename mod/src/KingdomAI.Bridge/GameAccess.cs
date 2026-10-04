@@ -48,9 +48,12 @@ internal sealed partial class GameAccess
     internal string? LastPayFailureActionId { get; private set; }
     internal string LastPayFailureReason { get; private set; } = "";
     private readonly string _version;
+    private readonly Func<long> _observationClock;
+    internal int ObservationIntervalMs { get; private set; } = 250;
 
-    internal GameAccess(string gameRoot, HarmonyLib.Harmony harmony)
+    internal GameAccess(string gameRoot, HarmonyLib.Harmony harmony, Func<long>? observationClock = null)
     {
+        _observationClock = observationClock ?? (() => Environment.TickCount64);
         var info = File.ReadAllText(Path.Combine(gameRoot, "BuildInfo.txt"));
         _version = info.Split('\n').FirstOrDefault(l => l.StartsWith("Version:"))?.Split(':', 2)[1].Trim() ?? "unknown";
         if (_version != "2.4.2" || !info.Contains("Hash: 116fe7e048"))
@@ -92,27 +95,21 @@ internal sealed partial class GameAccess
             access._payCommitted = true;
     }
 
-    private static Type? Find(string name)
-    {
-        foreach (var assemblyName in new[] { "Assembly-CSharp", "UnityEngine.CoreModule", "UnityEngine.InputLegacyModule", "Il2CppRewired_Core" })
-        {
-            try { Assembly.Load(assemblyName); } catch { }
-        }
-        return AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(name, false)).FirstOrDefault(t => t is not null);
-    }
+    private static Type? Find(string name) => ReflectionCache.Find(name);
     private static MethodInfo Unique(Type type, Func<MethodInfo, bool> predicate)
     {
-        var matches = type.GetMethods(Flags).Where(predicate).ToArray();
+        var matches = ReflectionCache.Methods(type).Where(predicate).ToArray();
         if (matches.Length != 1) throw new MissingMethodException(type.FullName, "接口签名不唯一或不存在");
         return matches[0];
     }
-    private static bool Has(Type type, string name) => type.GetProperty(name, Flags) is not null || type.GetField(name, Flags) is not null;
+    private static bool Has(Type type, string name) => ReflectionCache.GetMember(type, name) is var member
+        && (member.Property is not null || member.Field is not null);
     internal static object? Read(object? obj, string name)
     {
         if (obj is null) return null;
         var type = obj as Type ?? obj.GetType();
         var instance = obj is Type ? null : obj;
-        try { return type.GetProperty(name, Flags)?.GetValue(instance) ?? type.GetField(name, Flags)?.GetValue(instance); }
+        try { var member = ReflectionCache.GetMember(type, name); return member.Property?.GetValue(instance) ?? member.Field?.GetValue(instance); }
         catch { return null; }
     }
     private static object? Call(object? obj, string name, params object?[] args)
@@ -121,9 +118,7 @@ internal sealed partial class GameAccess
         var type = obj as Type ?? obj.GetType();
         try
         {
-            var method = type.GetMethods(Flags).SingleOrDefault(m => m.Name == name
-                && m.GetParameters().Length == args.Length && m.GetParameters().Select((p, i) =>
-                    args[i] is null ? !p.ParameterType.IsValueType : p.ParameterType.IsInstanceOfType(args[i])).All(match => match));
+            var method = ReflectionCache.Resolve(type, name, args);
             return method?.Invoke(obj is Type ? null : obj, args);
         }
         catch { return null; }
@@ -153,7 +148,7 @@ internal sealed partial class GameAccess
         _sprinting = false;
         _unitActionHeld = false;
         _sailingRequested = false;
-        _worldRefreshAt = 0;
+        ResetWorld();
         _uiOwned = false;
         _abilityObjects.Clear();
         _session = Guid.NewGuid().ToString();
@@ -427,8 +422,7 @@ internal sealed partial class GameAccess
         {
             Release();
             _session = Guid.NewGuid().ToString();
-            _worldRefreshAt = 0;
-            _worldCache = null;
+            ResetWorld();
             _uiOwned = false;
             _abilityObjects.Clear();
             _p2Identity = identity;
@@ -444,9 +438,10 @@ internal sealed partial class GameAccess
         _observedPayableIdentity = Identity(Read(p2, "selectedPayable"));
         var world = CaptureWorld(managers, game, director, p2, binding.Paused);
         var uiReady = UiBinding();
+        ObservationIntervalMs = binding.Ready || uiReady ? 50 : 250;
         var capabilities = binding.Ready || uiReady ? new List<string> { "stop", "dialogue_bubble", "map", "extended_world" } : new();
         if (binding.Ready) capabilities.AddRange(new[] { "move", "move_long", "move_to", "sprint", "pay_coin", "pay", "pay_currency", "drop", "ability", "sail" });
-        return new("0.5.0", _version, _session, ++_sequence, DateTimeOffset.UtcNow.ToString("O"), _scene,
+        return new("0.5.2", _version, _session, ++_sequence, DateTimeOffset.UtcNow.ToString("O"), _scene,
             binding.Ready, binding.Reason, binding.Coop, 1, released, players, capabilities.ToArray(),
             Diagnostics(managers, game, p2), world, UiReady: uiReady);
     }
@@ -474,9 +469,9 @@ internal sealed partial class GameAccess
         if (value is null || target is null) return null;
         try
         {
-            var cast = value.GetType().GetMethods(Flags).SingleOrDefault(m => m.Name == "Cast"
-                && m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 1 && m.GetParameters().Length == 0);
-            return cast?.MakeGenericMethod(target).Invoke(value, null);
+            if (ReflectionCache.Generic(value.GetType(), "TryCast", target) is { } tryCast)
+                return tryCast.Invoke(value, null);
+            return ReflectionCache.Generic(value.GetType(), "Cast", target)?.Invoke(value, null);
         }
         catch { return null; }
     }
@@ -492,7 +487,7 @@ internal sealed partial class GameAccess
             yield break;
         }
         var count = Int(Read(collection, "Count") ?? Read(collection, "Length"));
-        var indexer = collection.GetType().GetProperty("Item", Flags);
+        var indexer = ReflectionCache.GetMember(collection.GetType(), "Item").Property;
         if (count is >= 0 && indexer is not null)
         {
             for (var i = 0; i < count.Value; i++)
@@ -508,7 +503,7 @@ internal sealed partial class GameAccess
         // its typed IEnumerator<T> exposes Current, but MoveNext is on the
         // native non-generic IEnumerator. Keep Current typed as Player/Enemy.
         var source = collection;
-        if (!source.GetType().GetMethods(Flags).Any(m => m.Name == "GetEnumerator" && m.GetParameters().Length == 0))
+        if (!ReflectionCache.Methods(source.GetType(), "GetEnumerator").Any(m => ReflectionCache.Params(m).Length == 0))
         {
             var arguments = source.GetType().GetGenericArguments();
             var definition = Find("Il2CppSystem.Collections.Generic.IEnumerable`1");
@@ -518,7 +513,7 @@ internal sealed partial class GameAccess
         }
         var typed = Call(source, "GetEnumerator");
         if (typed is null) yield break;
-        var cursor = typed.GetType().GetMethods(Flags).Any(m => m.Name == "MoveNext" && m.GetParameters().Length == 0)
+        var cursor = ReflectionCache.Methods(typed.GetType(), "MoveNext").Any(m => ReflectionCache.Params(m).Length == 0)
             ? typed : NativeCast(typed, Find("Il2CppSystem.Collections.IEnumerator"));
         try
         {

@@ -174,7 +174,7 @@ def test_prompts_explain_autonomy_and_current_review_status(tmp_path):
 
         def handler(request):
             payload = json.loads(request.content)
-            packet = json.loads(payload["messages"][1]["content"])
+            packet = json.loads(payload["messages"][-1]["content"])
             observed.append((payload["messages"][0]["content"], packet))
             text = ('{"reply":"我继续巡视。","intent":"chat"}'
                     if payload["max_tokens"] == 4096 else '{"operation":"stop"}')

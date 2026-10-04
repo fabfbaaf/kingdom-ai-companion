@@ -32,7 +32,9 @@ namespace UnityEngine
     public static class Resources
     {
         public static readonly Dictionary<Type, object[]> All = new();
-        public static T[] FindObjectsOfTypeAll<T>() => All.GetValueOrDefault(typeof(T), []).Cast<T>().ToArray();
+        public static readonly Dictionary<Type, int> Reads = new();
+        public static T[] FindObjectsOfTypeAll<T>()
+        { Reads[typeof(T)] = Reads.GetValueOrDefault(typeof(T)) + 1; return All.GetValueOrDefault(typeof(T), []).Cast<T>().ToArray(); }
     }
 }
 namespace Il2CppRewired
@@ -41,6 +43,15 @@ namespace Il2CppRewired
 }
 namespace Il2Cpp
 {
+    public enum Side { Left = -1, Right = 1 }
+    public sealed class Sided<T>(T l, T r)
+    {
+        // Deliberately broken field proxies reproduce the audited bridge bug.
+        public T left => typeof(T) == typeof(float) ? (T)(object)(-6.036256e-10f) : l;
+        public T right => typeof(T) == typeof(float) ? (T)(object)(-6.036256e-10f) : r;
+        public T this[Side side] => side == Side.Left ? l : r;
+    }
+    public sealed class World { public Sided<float>? worldBounds { get; set; } }
     public enum CurrencyType { Coins, Gems }
     public enum PayState { None, Holding, Transaction, Completed, StateKeyDown, StateKeyHoldDetected, StateKeyHold, Cancelling }
     public sealed class Wallet
@@ -58,7 +69,8 @@ namespace Il2Cpp
         public int Price { get; set; } = 1;
         public CurrencyType Currency { get; set; } = CurrencyType.Coins;
         public bool PayableNow { get; set; } = true;
-        public bool CanPay(Player player) => PayableNow;
+        public int CanPayCalls { get; private set; }
+        public bool CanPay(Player player) { CanPayCalls++; return PayableNow; }
         public float PlayerPayPoint() => 0;
         public void TransactionComplete()
         {
@@ -156,6 +168,8 @@ namespace Il2Cpp
     }
     public sealed class Kingdom
     {
+        public Sided<float>? border { get; set; }
+        public Sided<float>? borderIntact { get; set; }
         public Boat boat { get; } = new();
         public Player playerOne { get; } = new(0, 10);
         public Player playerTwo { get; } = new(1, 20);
@@ -195,6 +209,7 @@ namespace Il2Cpp
         public Kingdom kingdom { get; } = new();
         public Game game { get; } = new();
         public Director director { get; } = new();
+        public World world { get; } = new();
         public EnemyManager enemies { get; } = new();
         public PayableManager payables { get; } = new();
         public Managers() => game._secondaryControllable = kingdom.playerTwo;
@@ -210,7 +225,12 @@ namespace Il2Cpp
     {
         public Il2CppSystem.Collections.Generic.ICollection<Enemy> AllEnemies { get; } = new(new());
     }
-    public sealed class PayableManager { public Payable[] AllPayables { get; set; } = Array.Empty<Payable>(); }
+    public sealed class PayableManager
+    {
+        private Payable[] _all = Array.Empty<Payable>();
+        public int Reads { get; private set; }
+        public Payable[] AllPayables { get { Reads++; return _all; } set => _all = value; }
+    }
     public static class NetworkBigBoss
     {
         public static bool IsOnline { get; set; }

@@ -72,7 +72,7 @@ def safe_context(value: dict | None) -> dict:
                                        and isinstance(item.get("target_id"), str)
                                        and type(item.get("remaining_seconds")) in {int, float}
                                        and 0 < item["remaining_seconds"] <= 20]
-    for key in ("memory", "plan"):
+    for key in ("memory", "plan", "territory"):
         if isinstance(value.get(key), dict):
             result[key] = _shared_facts(value[key])
     return result
@@ -93,6 +93,9 @@ _SHARED_FIELDS = frozenset({
     "target_id", "ability", "ability_action", "map_action", "amount", "target_x", "stage", "objective", "criteria",
     "metric", "comparison", "value", "description", "observed", "fallback", "failures", "feedback",
     "completed_stages", "evidence", "advisory", "landmarks", "last_plan",
+    "center_x", "camp_bounds", "intact_bounds", "island_bounds", "bounds_status", "issues",
+    "p2_region", "p2_distance_from_camp", "camp_building_count", "outside_building_count",
+    "frontier_candidates", "side", "distance_from_camp", "region", "purpose",
 })
 
 

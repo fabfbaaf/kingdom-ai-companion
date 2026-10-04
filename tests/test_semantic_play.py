@@ -70,7 +70,7 @@ def test_model_requests_share_memory_and_plan_and_can_refine_plan(tmp_path):
         packets = []
         def handler(request):
             payload = json.loads(request.content)
-            packets.append(json.loads(payload["messages"][1]["content"]))
+            packets.append(json.loads(payload["messages"][-1]["content"]))
             content = ('{"reply":"先招人，继续建设。","intent":"goal","goal":"先招募工人"}'
                        if payload["max_tokens"] == 4096 else
                        '{"operation":"stop","plan":{"stage":"economy","objective":"招募工人",'

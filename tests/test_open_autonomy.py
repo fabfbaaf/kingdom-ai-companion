@@ -207,7 +207,7 @@ def test_wallet_protocol_and_prompt_distinguish_unlimited_from_zero_budget(tmp_p
         model.store.settings.model = "mock"
         try:
             await model.decide(GameState.model_validate(state_data()), goal="经营营地", coin_budget=None)
-            packet = json.loads(captured[0]["messages"][1]["content"])
+            packet = json.loads(captured[0]["messages"][-1]["content"])
             assert packet["spending_mode"] == "wallet" and packet["remaining_coin_budget"] is None
             assert "不代表禁止付款" in captured[0]["messages"][0]["content"]
             assert "不再要求玩家人工解锁" in captured[0]["messages"][0]["content"]
