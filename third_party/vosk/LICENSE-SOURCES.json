@@ -1,0 +1,38 @@
+{
+  "VOSK-COPYING": {
+    "source": "https://raw.githubusercontent.com/alphacep/vosk-api/master/COPYING",
+    "sha256": "bb618af833c817ab01c1564bd3ec75ba4b4f9cf30910a4a2168e30a674ee8cc6"
+  },
+  "PORTAUDIO-LICENSE.txt": {
+    "source": "https://raw.githubusercontent.com/PortAudio/portaudio/master/LICENSE.txt",
+    "sha256": "ec52a1952d701f94e5135719a47376da4ee0b4a0201f1cafb49f61db6480ac3d"
+  },
+  "GCC-COPYING3": {
+    "source": "https://raw.githubusercontent.com/gcc-mirror/gcc/master/COPYING3",
+    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  "GCC-RUNTIME-EXCEPTION": {
+    "source": "https://raw.githubusercontent.com/gcc-mirror/gcc/master/COPYING.RUNTIME",
+    "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+  },
+  "MINGW-W64-COPYING": {
+    "source": "https://raw.githubusercontent.com/mingw-w64/mingw-w64/master/COPYING",
+    "sha256": "99a69660981156c21336fdb5661f89341b013c94e4bf9e1c7467b4745718397f"
+  },
+  "WINPTHREADS-COPYING": {
+    "source": "https://raw.githubusercontent.com/mingw-w64/mingw-w64/master/mingw-w64-libraries/winpthreads/COPYING",
+    "sha256": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177"
+  },
+  "KALDI-COPYING": {
+    "source": "https://raw.githubusercontent.com/kaldi-asr/kaldi/master/COPYING",
+    "sha256": "e68f06f3248553b47aa0014d176697c3cabab88395dd073f2887312742fa80b9"
+  },
+  "OPENBLAS-LICENSE.txt": {
+    "source": "https://raw.githubusercontent.com/OpenMathLib/OpenBLAS/develop/LICENSE",
+    "sha256": "190b5a9c8d9723fe958ad33916bd7346d96fab3c5ea90832bb02d854f620fcff"
+  },
+  "SOUNDDEVICE-LICENSE": {
+    "source": "https://github.com/spatialaudio/python-sounddevice/blob/0.5.6/LICENSE",
+    "sha256": "b6eea21bbafbaf7a2177e492f1be6b5efc6f4e708b1980773de51cdaa52f8211"
+  }
+}

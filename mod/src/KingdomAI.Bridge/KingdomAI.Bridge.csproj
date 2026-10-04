@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>KingdomAI.Bridge</AssemblyName>
+    <Version>0.5.0</Version>
+    <LoaderRefs Condition="'$(LoaderRefs)' == ''">$(MSBuildThisFileDirectory)..\..\..\.cache\MelonLoader\MelonLoader\net6</LoaderRefs>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="MelonLoader"><HintPath>$(LoaderRefs)\MelonLoader.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(LoaderRefs)\0Harmony.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <Target Name="CheckLoader" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(LoaderRefs)\MelonLoader.dll')" Text="Run scripts/prepare-loader.ps1 or supply -p:LoaderRefs=.../MelonLoader/net6" />
+  </Target>
+</Project>
